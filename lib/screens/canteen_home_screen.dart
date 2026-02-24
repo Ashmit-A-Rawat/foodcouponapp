@@ -1,8 +1,9 @@
+// lib/screens/canteen_home_screen.dart
 import 'package:flutter/material.dart';
 import 'dart:ui';
-import '../services/api_service.dart';
-import '../models/models.dart';
 import 'dart:async';
+import '../services/api_service.dart';
+import '../models/transaction.dart';
 
 class CanteenHomeScreen extends StatefulWidget {
   const CanteenHomeScreen({super.key});
@@ -17,6 +18,7 @@ class _CanteenHomeScreenState extends State<CanteenHomeScreen> with SingleTicker
   bool _isLoading = false;
   Timer? _refreshTimer;
   Map<String, dynamic>? _dashboardStats;
+  int _pendingOrders = 0;
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -33,9 +35,11 @@ class _CanteenHomeScreenState extends State<CanteenHomeScreen> with SingleTicker
     );
     _animationController.forward();
     _loadData();
-    // Auto-refresh every 5 seconds
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    _loadPendingOrders();
+    // Auto-refresh every 10 seconds
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       _loadData(silent: true);
+      _loadPendingOrders();
     });
   }
 
@@ -68,6 +72,15 @@ class _CanteenHomeScreenState extends State<CanteenHomeScreen> with SingleTicker
               .toList();
         }
         if (!silent) _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadPendingOrders() async {
+    final ordersResult = await _apiService.getCanteenOrders(status: 'pending');
+    if (ordersResult['success'] && mounted) {
+      setState(() {
+        _pendingOrders = ordersResult['count'] ?? 0;
       });
     }
   }
@@ -167,343 +180,447 @@ class _CanteenHomeScreenState extends State<CanteenHomeScreen> with SingleTicker
     if (confirm == true) {
       await _apiService.clearData();
       if (mounted) {
-        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+        Navigator.pushReplacementNamed(context, '/login');
       }
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
-      body: Stack(
-        children: [
-          // Background decorative elements
-          Positioned(
-            top: -100,
-            right: -80,
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF10B981).withOpacity(0.08),
-              ),
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: const Color(0xFFF5F5F7),
+    body: Stack(
+      children: [
+        // Background decorative elements
+        Positioned(
+          top: -100,
+          right: -80,
+          child: Container(
+            width: 280,
+            height: 280,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF10B981).withOpacity(0.08),
             ),
           ),
-          Positioned(
-            bottom: -120,
-            left: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF6366F1).withOpacity(0.06),
-              ),
+        ),
+        Positioned(
+          bottom: -120,
+          left: -100,
+          child: Container(
+            width: 300,
+            height: 300,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF6366F1).withOpacity(0.06),
             ),
           ),
+        ),
 
-          // Main content
-          SafeArea(
-            child: _isLoading
-                ? Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.8),
-                        width: 1,
+        // Main content
+        SafeArea(
+          child: _isLoading
+              ? Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.8),
+                            width: 1,
+                          ),
+                        ),
+                        child: const CircularProgressIndicator(
+                          color: Color(0xFF6366F1),
+                          strokeWidth: 3,
+                        ),
                       ),
                     ),
-                    child: const CircularProgressIndicator(
-                      color: Color(0xFF6366F1),
-                      strokeWidth: 3,
-                    ),
                   ),
-                ),
-              ),
-            )
-                : RefreshIndicator(
-              onRefresh: () => _loadData(),
-              color: const Color(0xFF6366F1),
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Header
-                        Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                )
+              : RefreshIndicator(
+                  onRefresh: () => _loadData(),
+                  color: const Color(0xFF6366F1),
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Header
+                            Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(
-                                    'Canteen Dashboard',
-                                    style: TextStyle(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF1F2937),
-                                    ),
-                                  ),
-                                  SizedBox(height: 4),
-                                  Text(
-                                    'Real-time updates',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Color(0xFF10B981),
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              // Menu button
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(16),
-                                child: BackdropFilter(
-                                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.7),
-                                      borderRadius: BorderRadius.circular(16),
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.8),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: PopupMenuButton<String>(
-                                      icon: const Icon(
-                                        Icons.more_vert_rounded,
-                                        color: Color(0xFF1F2937),
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      onSelected: (value) {
-                                        if (value == 'reports') {
-                                          Navigator.pushNamed(context, '/canteen-reports');
-                                        } else if (value == 'transactions') {
-                                          Navigator.pushNamed(context, '/canteen-transactions');
-                                        } else if (value == 'logout') {
-                                          _logout();
-                                        }
-                                      },
-                                      itemBuilder: (context) => [
-                                        PopupMenuItem(
-                                          value: 'reports',
-                                          child: Row(
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.all(8),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF6366F1).withOpacity(0.1),
-                                                  borderRadius: BorderRadius.circular(8),
-                                                ),
-                                                child: const Icon(
-                                                  Icons.analytics_rounded,
-                                                  color: Color(0xFF6366F1),
-                                                  size: 20,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              const Text('View Reports'),
-                                            ],
-                                          ),
-                                        ),
-                                        PopupMenuItem(
-                                          value: 'transactions',
-                                          child: Row(
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.all(8),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF8B5CF6).withOpacity(0.1),
-                                                  borderRadius: BorderRadius.circular(8),
-                                                ),
-                                                child: const Icon(
-                                                  Icons.receipt_long_rounded,
-                                                  color: Color(0xFF8B5CF6),
-                                                  size: 20,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              const Text('All Transactions'),
-                                            ],
-                                          ),
-                                        ),
-                                        PopupMenuItem(
-                                          value: 'logout',
-                                          child: Row(
-                                            children: [
-                                              Container(
-                                                padding: const EdgeInsets.all(8),
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFFEF4444).withOpacity(0.1),
-                                                  borderRadius: BorderRadius.circular(8),
-                                                ),
-                                                child: const Icon(
-                                                  Icons.logout_rounded,
-                                                  color: Color(0xFFEF4444),
-                                                  size: 20,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 12),
-                                              const Text('Logout'),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Dashboard Stats Cards
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _buildStatCard(
-                                  'Today\'s Revenue',
-                                  '₹${_dashboardStats?['todayRevenue']?.toStringAsFixed(2) ?? '0.00'}',
-                                  Icons.currency_rupee_rounded,
-                                  const Color(0xFF10B981),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildStatCard(
-                                  'Today\'s Orders',
-                                  '${_dashboardStats?['todayTransactions'] ?? 0}',
-                                  Icons.shopping_cart_rounded,
-                                  const Color(0xFF6366F1),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-
-                        // Recent Transactions Section
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 24),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Recent Transactions',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey.shade800,
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  Navigator.pushNamed(context, '/canteen-transactions');
-                                },
-                                child: const Text(
-                                  'View All',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF6366F1),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-
-                        // Transactions List
-                        if (_recentTransactions.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(24),
-                              child: BackdropFilter(
-                                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                                child: Container(
-                                  padding: const EdgeInsets.all(40),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.75),
-                                    borderRadius: BorderRadius.circular(24),
-                                    border: Border.all(
-                                      color: Colors.white.withOpacity(0.9),
-                                      width: 1.5,
-                                    ),
-                                  ),
-                                  child: Column(
+                                  const Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Icon(
-                                        Icons.receipt_long_rounded,
-                                        size: 60,
-                                        color: Colors.grey.shade400,
-                                      ),
-                                      const SizedBox(height: 16),
                                       Text(
-                                        'No transactions yet',
+                                        'Canteen Dashboard',
                                         style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.grey.shade700,
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF1F2937),
                                         ),
                                       ),
-                                      const SizedBox(height: 8),
+                                      SizedBox(height: 4),
                                       Text(
-                                        'Transactions will appear here',
+                                        'Real-time updates',
                                         style: TextStyle(
                                           fontSize: 14,
-                                          color: Colors.grey.shade600,
+                                          color: Color(0xFF10B981),
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                     ],
                                   ),
-                                ),
+                                  // Menu button with pending orders badge
+                                  Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(16),
+                                        child: BackdropFilter(
+                                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withOpacity(0.7),
+                                              borderRadius: BorderRadius.circular(16),
+                                              border: Border.all(
+                                                color: Colors.white.withOpacity(0.8),
+                                                width: 1,
+                                              ),
+                                            ),
+                                            child: PopupMenuButton<String>(
+                                              icon: const Icon(
+                                                Icons.more_vert_rounded,
+                                                color: Color(0xFF1F2937),
+                                              ),
+                                              shape: RoundedRectangleBorder(
+                                                borderRadius: BorderRadius.circular(16),
+                                              ),
+                                              onSelected: (value) {
+                                                if (value == 'menu') {
+                                                  Navigator.pushNamed(context, '/canteen-menu');
+                                                } else if (value == 'orders') {
+                                                  Navigator.pushNamed(context, '/canteen-orders');
+                                                } else if (value == 'reports') {
+                                                  Navigator.pushNamed(context, '/canteen-reports');
+                                                } else if (value == 'transactions') {
+                                                  Navigator.pushNamed(context, '/canteen-transactions');
+                                                } else if (value == 'logout') {
+                                                  _logout();
+                                                }
+                                              },
+                                              itemBuilder: (context) => [
+                                                const PopupMenuItem(
+                                                  value: 'menu',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(Icons.restaurant_menu, color: Color(0xFF6366F1)),
+                                                      SizedBox(width: 12),
+                                                      Text('Manage Menu'),
+                                                    ],
+                                                  ),
+                                                ),
+                                                PopupMenuItem(
+                                                  value: 'orders',
+                                                  child: Row(
+                                                    children: [
+                                                      const Icon(Icons.shopping_bag, color: Color(0xFF8B5CF6)),
+                                                      const SizedBox(width: 12),
+                                                      Text('Orders'),
+                                                      const Spacer(),
+                                                      if (_pendingOrders > 0)
+                                                        Container(
+                                                          padding: const EdgeInsets.all(4),
+                                                          decoration: const BoxDecoration(
+                                                            color: Color(0xFFEF4444),
+                                                            shape: BoxShape.circle,
+                                                          ),
+                                                          child: Text(
+                                                            '$_pendingOrders',
+                                                            style: const TextStyle(
+                                                              color: Colors.white,
+                                                              fontSize: 10,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'reports',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(Icons.analytics, color: Color(0xFFF59E0B)),
+                                                      SizedBox(width: 12),
+                                                      Text('Reports'),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'transactions',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(Icons.history, color: Color(0xFF10B981)),
+                                                      SizedBox(width: 12),
+                                                      Text('Transactions'),
+                                                    ],
+                                                  ),
+                                                ),
+                                                const PopupMenuItem(
+                                                  value: 'logout',
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(Icons.logout, color: Color(0xFFEF4444)),
+                                                      SizedBox(width: 12),
+                                                      Text('Logout'),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      if (_pendingOrders > 0)
+                                        Positioned(
+                                          right: 4,
+                                          top: 4,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: const BoxDecoration(
+                                              color: Color(0xFFEF4444),
+                                              shape: BoxShape.circle,
+                                            ),
+                                            constraints: const BoxConstraints(
+                                              minWidth: 18,
+                                              minHeight: 18,
+                                            ),
+                                            child: Text(
+                                              '$_pendingOrders',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ],
                               ),
                             ),
-                          )
-                        else
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 24),
-                            child: Column(
-                              children: _recentTransactions.asMap().entries.map((entry) {
-                                final index = entry.key;
-                                final transaction = entry.value;
-                                return _buildTransactionCard(transaction, index);
-                              }).toList(),
+
+                            // Dashboard Stats Cards
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'Today\'s Revenue',
+                                      '₹${_dashboardStats?['todayRevenue']?.toStringAsFixed(2) ?? '0.00'}',
+                                      Icons.currency_rupee_rounded,
+                                      const Color(0xFF10B981),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: _buildStatCard(
+                                      'Today\'s Orders',
+                                      '${_dashboardStats?['todayTransactions'] ?? 0}',
+                                      Icons.shopping_cart_rounded,
+                                      const Color(0xFF6366F1),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                      ],
+                            const SizedBox(height: 32),
+
+                            // Quick Actions
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Quick Actions',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF1F2937),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.pushNamed(context, '/canteen-orders');
+                                    },
+                                    child: Text(
+                                      'View All Orders',
+                                      style: TextStyle(
+                                        color: _pendingOrders > 0
+                                            ? const Color(0xFFEF4444)
+                                            : const Color(0xFF6366F1),
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Action Cards
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildActionCard(
+                                      icon: Icons.restaurant_menu,
+                                      title: 'Manage Menu',
+                                      subtitle: 'Add/Edit items',
+                                      color: const Color(0xFF6366F1),
+                                      onTap: () {
+                                        Navigator.pushNamed(context, '/canteen-menu');
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: _buildActionCard(
+                                      icon: Icons.shopping_bag,
+                                      title: 'Orders',
+                                      subtitle: '${_pendingOrders} pending',
+                                      color: _pendingOrders > 0
+                                          ? const Color(0xFFEF4444)
+                                          : const Color(0xFF8B5CF6),
+                                      onTap: () {
+                                        Navigator.pushNamed(context, '/canteen-orders');
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 32),
+
+                            // Recent Transactions Section
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Recent Transactions',
+                                    style: TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey.shade800,
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.pushNamed(context, '/canteen-transactions');
+                                    },
+                                    child: const Text(
+                                      'View All',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF6366F1),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // Transactions List
+                            if (_recentTransactions.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: BackdropFilter(
+                                    filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(40),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.75),
+                                        borderRadius: BorderRadius.circular(24),
+                                        border: Border.all(
+                                          color: Colors.white.withOpacity(0.9),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Icon(
+                                            Icons.receipt_long_rounded,
+                                            size: 60,
+                                            color: Colors.grey.shade400,
+                                          ),
+                                          const SizedBox(height: 16),
+                                          Text(
+                                            'No transactions yet',
+                                            style: TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            'Transactions will appear here',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              color: Colors.grey.shade600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            else
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 24),
+                                child: Column(
+                                  children: _recentTransactions.asMap().entries.map((entry) {
+                                    final index = entry.key;
+                                    final transaction = entry.value;
+                                    return _buildTransactionCard(transaction, index);
+                                  }).toList(),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
+        ),
+      ],
+    ),
+  );
+}
   Widget _buildStatCard(String title, String value, IconData icon, Color color) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(22),
@@ -556,6 +673,67 @@ class _CanteenHomeScreenState extends State<CanteenHomeScreen> with SingleTicker
                 textAlign: TextAlign.center,
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.8),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(icon, color: color, size: 26),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

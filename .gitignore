@@ -18,10 +18,9 @@ migrate_working_dir/
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# VS Code
+.vscode/
+.vscode/*
 
 # Flutter/Dart/Pub related
 **/doc/api/
@@ -44,4 +43,147 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Environment files
 .env
+.env.local
+.env.dev
+.env.prod
+*.env
+
+# Key stores and signing files
+*.jks
+*.keystore
+key.properties
+android/key.properties
+ios/Runner/GoogleService-Info.plist
+
+# Firebase
+google-services.json
+GoogleService-Info.plist
+
+# Coverage and testing
+/coverage/
+/test_reports/
+/test_*.xml
+*.g.dart
+*.freezed.dart
+*.mocks.dart
+
+# IDE and editor specific
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-*
+*.sublime-workspace
+
+# macOS
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcuserstate
+project.xcworkspace/
+xcuserdata/
+
+# iOS
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/Pods/
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# Android
+**/android/app/google-services.json
+**/android/app/src/main/ku/development/
+**/android/app/src/main/ku/staging/
+**/android/app/src/main/ku/production/
+**/android/.gradle/
+**/android/captures/
+**/android/gradle/
+**/android/gradlew
+**/android/gradlew.bat
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+
+# Web
+**/web/index.html
+**/web/manifest.json
+**/web/favicon.png
+**/web/icons/
+
+# Windows
+**/windows/flutter/generated_plugin_registrant.cc
+**/windows/flutter/generated_plugins.cmake
+
+# Linux
+**/linux/flutter/generated_plugin_registrant.cc
+**/linux/flutter/generated_plugins.cmake
+
+# macOS Flutter
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Flutter/ephemeral/
+
+# Assets and media
+**/assets/sounds/*.mp3
+**/assets/videos/*
+**/assets/temp/*
+
+# Secrets and private keys
+*.p12
+*.p8
+*.mobileprovision
+auth_keys/
+secrets/
+
+# Reports and exports
+*.excel
+*.xlsx
+*.pdf
+*.csv
+/downloads/
+/exports/
+/temp_downloads/
+
+# Cache and temporary files
+*.tmp
+*.temp
+.cache/
+.temp/
+
+# Logs and databases
+*.log
+*.sqlite
+*.db
+/logs/
+/databases/
+
+# Node modules (if any in frontend)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build outputs
+*.apk
+*.aab
+*.ipa
+*.app
+*.exe
+/dist/
+/out/
+/release/
+
+# Versioning
+version.txt
+build_number.txt
+
+# Dependencies lock files
+pubspec.lock
+
+# Remember:
+# - .env files contain sensitive keys (Razorpay, API URLs)
+# - Key stores should NEVER be committed
+# - Build outputs are generated and can be large
+# - IDE settings are personal preference

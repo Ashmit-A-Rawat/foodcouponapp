@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
-import 'dart:convert';
 import 'dart:ui';
-import 'package:crypto/crypto.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import '../services/api_service.dart';
 import 'package:audioplayers/audioplayers.dart';
