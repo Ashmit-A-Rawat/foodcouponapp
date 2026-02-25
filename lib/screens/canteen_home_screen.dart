@@ -505,7 +505,7 @@ Widget build(BuildContext context) {
                                     child: _buildActionCard(
                                       icon: Icons.shopping_bag,
                                       title: 'Orders',
-                                      subtitle: '${_pendingOrders} pending',
+                                      subtitle: '$_pendingOrders pending',
                                       color: _pendingOrders > 0
                                           ? const Color(0xFFEF4444)
                                           : const Color(0xFF8B5CF6),

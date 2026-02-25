@@ -8,9 +8,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter/material.dart';
 
 class ApiService {
-  static final String baseUrl = dotenv.env['BASE_URL'] ?? 'http://10.140.215.235:5001';
+  static final String baseUrl =
+      dotenv.env['BASE_URL'] ?? 'http://10.140.215.235:5001';
 
-  // Navigation key for global navigation
   static GlobalKey<NavigatorState>? navigatorKey;
 
   // ==================== TOKEN MANAGEMENT ====================
@@ -24,12 +24,14 @@ class ApiService {
     await prefs.setString('token', token);
   }
 
+  // FIX: backend returns _id (MongoDB ObjectId), not id
   Future<void> saveUserData(Map<String, dynamic> user) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('userId', user['id']);
-    await prefs.setString('username', user['username']);
-    await prefs.setString('name', user['name']);
-    await prefs.setString('role', user['role']);
+    await prefs.setString(
+        'userId', user['_id']?.toString() ?? user['id']?.toString() ?? '');
+    await prefs.setString('username', user['username']?.toString() ?? '');
+    await prefs.setString('name', user['name']?.toString() ?? '');
+    await prefs.setString('role', user['role']?.toString() ?? '');
   }
 
   Future<Map<String, String>> getUserData() async {
@@ -55,18 +57,12 @@ class ApiService {
     };
   }
 
-  // Handle 401 Unauthorized - Clear token and navigate to login
   Future<void> _handleUnauthorized() async {
     await clearData();
-    if (navigatorKey?.currentContext != null) {
-      navigatorKey!.currentState?.pushNamedAndRemoveUntil(
-        '/login',
-        (route) => false,
-      );
-    }
+    navigatorKey?.currentState
+        ?.pushNamedAndRemoveUntil('/login', (route) => false);
   }
 
-  // Check response for 401 and handle it
   Future<Map<String, dynamic>> _handleResponse(http.Response response,
       {bool checkAuth = true}) async {
     if (checkAuth && response.statusCode == 401) {
@@ -76,11 +72,14 @@ class ApiService {
         'message': 'Session expired. Please login again.'
       };
     }
-    return jsonDecode(response.body);
+    try {
+      return jsonDecode(response.body);
+    } catch (_) {
+      return {'success': false, 'message': 'Invalid server response'};
+    }
   }
 
   // ==================== AUTHENTICATION ====================
-  // Register
   Future<Map<String, dynamic>> register({
     required String username,
     required String password,
@@ -90,27 +89,20 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/api/auth/register'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': username,
-          'password': password,
-          'name': name,
-        }),
+        body: jsonEncode(
+            {'username': username, 'password': password, 'name': name}),
       );
-
       final data = jsonDecode(response.body);
-
-      if (response.statusCode == 201 && data['success']) {
+      if (response.statusCode == 201 && data['success'] == true) {
         await saveToken(data['token']);
         await saveUserData(data['user']);
       }
-
       return data;
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Login
   Future<Map<String, dynamic>> login({
     required String username,
     required String password,
@@ -119,33 +111,24 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/api/auth/login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'username': username,
-          'password': password,
-        }),
+        body: jsonEncode({'username': username, 'password': password}),
       );
-
       final data = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && data['success']) {
+      if (response.statusCode == 200 && data['success'] == true) {
         await saveToken(data['token']);
         await saveUserData(data['user']);
       }
-
       return data;
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Get current user
   Future<Map<String, dynamic>> getMe() async {
     try {
       final headers = await getHeaders();
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/auth/me'),
-        headers: headers,
-      );
+      final response =
+          await http.get(Uri.parse('$baseUrl/api/auth/me'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
@@ -153,21 +136,18 @@ class ApiService {
   }
 
   // ==================== WALLET & PAYMENTS ====================
-  // Get balance
   Future<Map<String, dynamic>> getBalance() async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/payment/balance'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/payment/balance'),
+          headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Make payment
   Future<Map<String, dynamic>> makePayment({
     required double amount,
     String? description,
@@ -188,14 +168,12 @@ class ApiService {
     }
   }
 
-  // Get transactions
   Future<Map<String, dynamic>> getTransactions() async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/payment/transactions'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/payment/transactions'),
+          headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
@@ -203,7 +181,6 @@ class ApiService {
   }
 
   // ==================== RAZORPAY INTEGRATION ====================
-  // Create Razorpay order
   Future<Map<String, dynamic>> createRazorpayOrder(
       {required double amount}) async {
     try {
@@ -219,7 +196,6 @@ class ApiService {
     }
   }
 
-  // Verify Razorpay payment
   Future<Map<String, dynamic>> verifyRazorpayPayment({
     required String orderId,
     required String paymentId,
@@ -244,14 +220,12 @@ class ApiService {
     }
   }
 
-  // Get Razorpay payment history
   Future<Map<String, dynamic>> getRazorpayPaymentHistory() async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/razorpay/payment-history'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/razorpay/payment-history'),
+          headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
@@ -259,13 +233,10 @@ class ApiService {
   }
 
   // ==================== MENU MANAGEMENT ====================
-  // Get all menu items (for users)
   Future<Map<String, dynamic>> getMenuItems({String? category}) async {
     try {
       String url = '$baseUrl/api/menu';
-      if (category != null && category != 'all') {
-        url += '?category=$category';
-      }
+      if (category != null && category != 'all') url += '?category=$category';
       final headers = await getHeaders();
       final response = await http.get(Uri.parse(url), headers: headers);
       return await _handleResponse(response);
@@ -274,33 +245,29 @@ class ApiService {
     }
   }
 
-  // Get single menu item
   Future<Map<String, dynamic>> getMenuItem(String itemId) async {
     try {
       final headers = await getHeaders();
-      final response =
-          await http.get(Uri.parse('$baseUrl/api/menu/$itemId'), headers: headers);
+      final response = await http.get(
+          Uri.parse('$baseUrl/api/menu/$itemId'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Get canteen's own menu (for canteen staff)
+  // NOTE: /canteen/my-menu must be registered BEFORE /:id in menuRoutes.js
   Future<Map<String, dynamic>> getCanteenMenu() async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/menu/canteen/my-menu'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/menu/canteen/my-menu'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Create menu item (canteen only)
   Future<Map<String, dynamic>> createMenuItem({
     required String name,
     required String description,
@@ -331,7 +298,6 @@ class ApiService {
     }
   }
 
-  // Update menu item (canteen only)
   Future<Map<String, dynamic>> updateMenuItem({
     required String itemId,
     String? name,
@@ -354,7 +320,6 @@ class ApiService {
       if (isAvailable != null) body['isAvailable'] = isAvailable;
       if (availableFrom != null) body['availableFrom'] = availableFrom;
       if (availableTo != null) body['availableTo'] = availableTo;
-
       final response = await http.put(
         Uri.parse('$baseUrl/api/menu/$itemId'),
         headers: headers,
@@ -366,28 +331,23 @@ class ApiService {
     }
   }
 
-  // Toggle menu item availability (canteen only)
-  Future<Map<String, dynamic>> toggleMenuItemAvailability(String itemId) async {
+  Future<Map<String, dynamic>> toggleMenuItemAvailability(
+      String itemId) async {
     try {
       final headers = await getHeaders();
       final response = await http.patch(
-        Uri.parse('$baseUrl/api/menu/$itemId/toggle'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/menu/$itemId/toggle'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Delete menu item (canteen only)
   Future<Map<String, dynamic>> deleteMenuItem(String itemId) async {
     try {
       final headers = await getHeaders();
       final response = await http.delete(
-        Uri.parse('$baseUrl/api/menu/$itemId'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/menu/$itemId'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
@@ -395,7 +355,6 @@ class ApiService {
   }
 
   // ==================== ORDER MANAGEMENT ====================
-  // Create new order
   Future<Map<String, dynamic>> createOrder({
     required List<Map<String, dynamic>> items,
     DateTime? requestedTime,
@@ -404,17 +363,13 @@ class ApiService {
   }) async {
     try {
       final headers = await getHeaders();
-      final body = {
+      final body = <String, dynamic>{
         'items': items,
         'paymentMethod': paymentMethod,
       };
-      
-      if (requestedTime != null) {
+      if (requestedTime != null)
         body['requestedTime'] = requestedTime.toIso8601String();
-      }
-      if (notes != null && notes.isNotEmpty) {
-        body['notes'] = notes;
-      }
+      if (notes != null && notes.isNotEmpty) body['notes'] = notes;
 
       final response = await http.post(
         Uri.parse('$baseUrl/api/orders'),
@@ -427,62 +382,49 @@ class ApiService {
     }
   }
 
-  // Get user's orders
   Future<Map<String, dynamic>> getMyOrders() async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/orders/my-orders'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/orders/my-orders'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Get single order
   Future<Map<String, dynamic>> getOrder(String orderId) async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/orders/$orderId'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/orders/$orderId'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Cancel order (user)
   Future<Map<String, dynamic>> cancelOrder(String orderId) async {
     try {
       final headers = await getHeaders();
       final response = await http.put(
-        Uri.parse('$baseUrl/api/orders/$orderId/cancel'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/orders/$orderId/cancel'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Get canteen orders (canteen only)
   Future<Map<String, dynamic>> getCanteenOrders({
     String? status,
     String? date,
   }) async {
     try {
       String url = '$baseUrl/api/orders/canteen/all';
-      final queryParams = <String>[];
-      if (status != null) queryParams.add('status=$status');
-      if (date != null) queryParams.add('date=$date');
-      if (queryParams.isNotEmpty) {
-        url += '?${queryParams.join('&')}';
-      }
-
+      final params = <String>[];
+      if (status != null) params.add('status=$status');
+      if (date != null) params.add('date=$date');
+      if (params.isNotEmpty) url += '?${params.join('&')}';
       final headers = await getHeaders();
       final response = await http.get(Uri.parse(url), headers: headers);
       return await _handleResponse(response);
@@ -491,7 +433,6 @@ class ApiService {
     }
   }
 
-  // Update order status (canteen only)
   Future<Map<String, dynamic>> updateOrderStatus({
     required String orderId,
     required String status,
@@ -499,11 +440,9 @@ class ApiService {
   }) async {
     try {
       final headers = await getHeaders();
-      final body = {'status': status};
-      if (actualReadyTime != null) {
+      final body = <String, dynamic>{'status': status};
+      if (actualReadyTime != null)
         body['actualReadyTime'] = actualReadyTime.toIso8601String();
-      }
-
       final response = await http.put(
         Uri.parse('$baseUrl/api/orders/$orderId/status'),
         headers: headers,
@@ -515,8 +454,8 @@ class ApiService {
     }
   }
 
-  // Verify QR code and complete order (canteen only)
-  Future<Map<String, dynamic>> verifyQRAndCompleteOrder(String qrToken) async {
+  Future<Map<String, dynamic>> verifyQRAndCompleteOrder(
+      String qrToken) async {
     try {
       final headers = await getHeaders();
       final response = await http.post(
@@ -531,21 +470,17 @@ class ApiService {
   }
 
   // ==================== ADMIN FUNCTIONS ====================
-  // Admin: Get all users
   Future<Map<String, dynamic>> getAllUsers() async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/payment/users'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/payment/users'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Admin: Set user balance
   Future<Map<String, dynamic>> setBalance({
     required String userId,
     required double amount,
@@ -563,21 +498,17 @@ class ApiService {
     }
   }
 
-  // Admin: Get all balance summaries
   Future<Map<String, dynamic>> getBalanceSummaries() async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/admin/balance-summaries'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/admin/balance-summaries'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Admin: Get balance summary by month/year
   Future<Map<String, dynamic>> getBalanceSummaryByMonth({
     required int year,
     required int month,
@@ -585,44 +516,36 @@ class ApiService {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/admin/balance-summary/$year/$month'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/admin/balance-summary/$year/$month'),
+          headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Admin: Manually trigger balance reset
   Future<Map<String, dynamic>> triggerBalanceReset() async {
     try {
       final headers = await getHeaders();
       final response = await http.post(
-        Uri.parse('$baseUrl/api/admin/reset-balances'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/admin/reset-balances'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Admin: Get statistics
   Future<Map<String, dynamic>> getStatistics() async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/admin/statistics'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/admin/statistics'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Admin: Create new user
   Future<Map<String, dynamic>> createUser({
     required String username,
     required String password,
@@ -650,211 +573,152 @@ class ApiService {
   }
 
   // ==================== CANTEEN REPORTING ====================
-  // Canteen: Get dashboard stats
   Future<Map<String, dynamic>> getCanteenDashboardStats() async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/canteen/dashboard'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/canteen/dashboard'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Canteen: Get all transactions
   Future<Map<String, dynamic>> getCanteenTransactions() async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/canteen/transactions'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/canteen/transactions'), headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Canteen: Get transactions by date
-  Future<Map<String, dynamic>> getCanteenTransactionsByDate(String date) async {
+  Future<Map<String, dynamic>> getCanteenTransactionsByDate(
+      String date) async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/canteen/transactions/date/$date'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/canteen/transactions/date/$date'),
+          headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Canteen: Get transactions by month
   Future<Map<String, dynamic>> getCanteenTransactionsByMonth(
       int year, int month) async {
     try {
       final headers = await getHeaders();
       final response = await http.get(
-        Uri.parse('$baseUrl/api/canteen/transactions/month/$year/$month'),
-        headers: headers,
-      );
+          Uri.parse('$baseUrl/api/canteen/transactions/month/$year/$month'),
+          headers: headers);
       return await _handleResponse(response);
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Canteen: Export to Excel with optional date filters
   Future<Map<String, dynamic>> exportCanteenToExcel({
     DateTime? startDate,
     DateTime? endDate,
   }) async {
     try {
       final headers = await getHeaders();
-
       String url = '$baseUrl/api/canteen/export/excel';
-      List<String> queryParams = [];
-
-      if (startDate != null) {
-        final dateStr =
-            '${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}';
-        queryParams.add('startDate=$dateStr');
-      }
-
-      if (endDate != null) {
-        final dateStr =
-            '${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}';
-        queryParams.add('endDate=$dateStr');
-      }
-
-      if (queryParams.isNotEmpty) {
-        url += '?${queryParams.join('&')}';
-      }
+      final params = <String>[];
+      if (startDate != null)
+        params.add(
+            'startDate=${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}');
+      if (endDate != null)
+        params.add(
+            'endDate=${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}');
+      if (params.isNotEmpty) url += '?${params.join('&')}';
 
       final response = await http.get(Uri.parse(url), headers: headers);
 
       if (response.statusCode == 401) {
         await _handleUnauthorized();
-        return {
-          'success': false,
-          'message': 'Session expired. Please login again.'
-        };
+        return {'success': false, 'message': 'Session expired.'};
       }
-
       if (response.statusCode == 200) {
         final contentType = response.headers['content-type'] ?? '';
-
         if (contentType.contains(
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') ||
             contentType.contains('application/octet-stream')) {
-          Directory? directory;
-          if (Platform.isAndroid) {
-            directory = await getExternalStorageDirectory();
-          } else {
-            directory = await getApplicationDocumentsDirectory();
-          }
-
+          final dir = Platform.isAndroid
+              ? await getExternalStorageDirectory()
+              : await getApplicationDocumentsDirectory();
           final fileName =
               'Canteen_Report_${DateTime.now().millisecondsSinceEpoch}.xlsx';
-          final filePath = '${directory!.path}/$fileName';
-
-          final file = File(filePath);
-          await file.writeAsBytes(response.bodyBytes);
-
+          final filePath = '${dir!.path}/$fileName';
+          await File(filePath).writeAsBytes(response.bodyBytes);
           return {
             'success': true,
-            'message': 'Excel file downloaded successfully',
+            'message': 'Excel downloaded',
             'filePath': filePath,
             'fileName': fileName
           };
-        } else {
-          return jsonDecode(response.body);
         }
-      } else {
-        return {
-          'success': false,
-          'message': 'Export failed with status ${response.statusCode}'
-        };
+        return jsonDecode(response.body);
       }
+      return {
+        'success': false,
+        'message': 'Export failed (${response.statusCode})'
+      };
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
 
-  // Canteen: Export to PDF with optional date filters
   Future<Map<String, dynamic>> exportCanteenToPDF({
     DateTime? startDate,
     DateTime? endDate,
   }) async {
     try {
       final headers = await getHeaders();
-
       String url = '$baseUrl/api/canteen/export/pdf';
-      List<String> queryParams = [];
-
-      if (startDate != null) {
-        final dateStr =
-            '${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}';
-        queryParams.add('startDate=$dateStr');
-      }
-
-      if (endDate != null) {
-        final dateStr =
-            '${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}';
-        queryParams.add('endDate=$dateStr');
-      }
-
-      if (queryParams.isNotEmpty) {
-        url += '?${queryParams.join('&')}';
-      }
+      final params = <String>[];
+      if (startDate != null)
+        params.add(
+            'startDate=${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}');
+      if (endDate != null)
+        params.add(
+            'endDate=${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}');
+      if (params.isNotEmpty) url += '?${params.join('&')}';
 
       final response = await http.get(Uri.parse(url), headers: headers);
 
       if (response.statusCode == 401) {
         await _handleUnauthorized();
-        return {
-          'success': false,
-          'message': 'Session expired. Please login again.'
-        };
+        return {'success': false, 'message': 'Session expired.'};
       }
-
       if (response.statusCode == 200) {
         final contentType = response.headers['content-type'] ?? '';
-
         if (contentType.contains('application/pdf') ||
             contentType.contains('application/octet-stream')) {
-          Directory? directory;
-          if (Platform.isAndroid) {
-            directory = await getExternalStorageDirectory();
-          } else {
-            directory = await getApplicationDocumentsDirectory();
-          }
-
+          final dir = Platform.isAndroid
+              ? await getExternalStorageDirectory()
+              : await getApplicationDocumentsDirectory();
           final fileName =
               'Canteen_Report_${DateTime.now().millisecondsSinceEpoch}.pdf';
-          final filePath = '${directory!.path}/$fileName';
-
-          final file = File(filePath);
-          await file.writeAsBytes(response.bodyBytes);
-
+          final filePath = '${dir!.path}/$fileName';
+          await File(filePath).writeAsBytes(response.bodyBytes);
           return {
             'success': true,
-            'message': 'PDF file downloaded successfully',
+            'message': 'PDF downloaded',
             'filePath': filePath,
             'fileName': fileName
           };
-        } else {
-          return jsonDecode(response.body);
         }
-      } else {
-        return {
-          'success': false,
-          'message': 'Export failed with status ${response.statusCode}'
-        };
+        return jsonDecode(response.body);
       }
+      return {
+        'success': false,
+        'message': 'Export failed (${response.statusCode})'
+      };
     } catch (e) {
       return {'success': false, 'message': 'Network error: $e'};
     }

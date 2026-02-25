@@ -10,7 +10,6 @@ import 'package:foodapp/screens/canteen_reports_screen.dart';
 import 'package:foodapp/screens/canteen_transactions_screen.dart';
 import 'package:foodapp/screens/menu_screen.dart';
 import 'package:foodapp/screens/my_orders_screen.dart';
-import 'package:foodapp/screens/order_confirmation_screen.dart';
 import 'package:foodapp/services/api_service.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
@@ -76,10 +75,6 @@ class MyApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(),
         '/menu': (context) => const MenuScreen(),
         '/my-orders': (context) => const MyOrdersScreen(),
-        '/order-confirmation': (context) => const OrderConfirmationScreen(
-              cartItems: [],
-              totalAmount: 0,
-            ),
         '/qr-scanner': (context) => const QRScannerScreen(),
         '/transactions': (context) => const TransactionsScreen(),
         '/admin-home': (context) => const AdminHomeScreen(),

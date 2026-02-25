@@ -291,8 +291,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               _razorpayService.openCheckout(
                                 amount: amount,
                                 name: userData['name'] ?? 'User',
-                                email: 'user@example.com',
-                                contact: '9999999999',
+                                email: 'ashmitrawat44@gmail.com',
+                                contact: '9892765476',
                               );
                             }
                           },

@@ -395,9 +395,7 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> with 
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
-                        Navigator.popUntil(context, (route) {
-                          return route.settings.name == '/home';
-                        });
+                        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF6366F1),
@@ -553,8 +551,8 @@ class _OrderConfirmationScreenState extends State<OrderConfirmationScreen> with 
                               _razorpayService.openCheckout(
                                 amount: amount,
                                 name: userData['name'] ?? 'User',
-                                email: 'user@example.com',
-                                contact: '9999999999',
+                                email: 'ashmitrawat44@gmail.com',
+                                contact: '9892765476',
                               );
                             }
                           },

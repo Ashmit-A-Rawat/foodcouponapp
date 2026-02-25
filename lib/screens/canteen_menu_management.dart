@@ -222,7 +222,7 @@ class _CanteenMenuManagementState extends State<CanteenMenuManagement> with Sing
 
                     // Category dropdown
                     DropdownButtonFormField<String>(
-                      value: selectedCategory,
+                      initialValue: selectedCategory,
                       decoration: InputDecoration(
                         labelText: 'Category',
                         prefixIcon: const Icon(Icons.category, color: Color(0xFF6366F1)),
