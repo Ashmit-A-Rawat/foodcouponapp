@@ -32,6 +32,8 @@ class ApiService {
     await prefs.setString('username', user['username']?.toString() ?? '');
     await prefs.setString('name', user['name']?.toString() ?? '');
     await prefs.setString('role', user['role']?.toString() ?? '');
+    await prefs.setString('email', user['email']?.toString() ?? '');
+    await prefs.setString('phone', user['phone']?.toString() ?? user['contact']?.toString() ?? '');
   }
 
   Future<Map<String, String>> getUserData() async {
@@ -41,6 +43,8 @@ class ApiService {
       'username': prefs.getString('username') ?? '',
       'name': prefs.getString('name') ?? '',
       'role': prefs.getString('role') ?? '',
+      'email': prefs.getString('email') ?? '',
+      'phone': prefs.getString('phone') ?? '',
     };
   }
 
