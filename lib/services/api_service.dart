@@ -367,9 +367,8 @@ class ApiService {
         'items': items,
         'paymentMethod': paymentMethod,
       };
-      if (requestedTime != null) {
+      if (requestedTime != null)
         body['requestedTime'] = requestedTime.toIso8601String();
-      }
       if (notes != null && notes.isNotEmpty) body['notes'] = notes;
 
       final response = await http.post(
@@ -442,9 +441,8 @@ class ApiService {
     try {
       final headers = await getHeaders();
       final body = <String, dynamic>{'status': status};
-      if (actualReadyTime != null) {
+      if (actualReadyTime != null)
         body['actualReadyTime'] = actualReadyTime.toIso8601String();
-      }
       final response = await http.put(
         Uri.parse('$baseUrl/api/orders/$orderId/status'),
         headers: headers,
@@ -460,7 +458,7 @@ class ApiService {
       String qrToken) async {
     try {
       final headers = await getHeaders();
-      final response = await http.post(
+      final response = await http.put(
         Uri.parse('$baseUrl/api/orders/verify-qr'),
         headers: headers,
         body: jsonEncode({'qrToken': qrToken}),
@@ -631,14 +629,12 @@ class ApiService {
       final headers = await getHeaders();
       String url = '$baseUrl/api/canteen/export/excel';
       final params = <String>[];
-      if (startDate != null) {
+      if (startDate != null)
         params.add(
             'startDate=${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}');
-      }
-      if (endDate != null) {
+      if (endDate != null)
         params.add(
             'endDate=${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}');
-      }
       if (params.isNotEmpty) url += '?${params.join('&')}';
 
       final response = await http.get(Uri.parse(url), headers: headers);
@@ -685,14 +681,12 @@ class ApiService {
       final headers = await getHeaders();
       String url = '$baseUrl/api/canteen/export/pdf';
       final params = <String>[];
-      if (startDate != null) {
+      if (startDate != null)
         params.add(
             'startDate=${startDate.year}-${startDate.month.toString().padLeft(2, '0')}-${startDate.day.toString().padLeft(2, '0')}');
-      }
-      if (endDate != null) {
+      if (endDate != null)
         params.add(
             'endDate=${endDate.year}-${endDate.month.toString().padLeft(2, '0')}-${endDate.day.toString().padLeft(2, '0')}');
-      }
       if (params.isNotEmpty) url += '?${params.join('&')}';
 
       final response = await http.get(Uri.parse(url), headers: headers);

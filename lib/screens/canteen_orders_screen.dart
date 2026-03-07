@@ -1,9 +1,13 @@
 // lib/screens/canteen_orders_screen.dart
+//
+// Canteen staff manages incoming orders here.
+// For orders with status "ready", a "Show QR" button displays the order's
+// qrToken as a QR code on screen. The user scans it with QRScannerScreen.
+
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'dart:ui';
-import 'package:intl/intl.dart';
 import '../services/api_service.dart';
-import '../models/order.dart';
 
 class CanteenOrdersScreen extends StatefulWidget {
   const CanteenOrdersScreen({super.key});
@@ -12,630 +16,612 @@ class CanteenOrdersScreen extends StatefulWidget {
   State<CanteenOrdersScreen> createState() => _CanteenOrdersScreenState();
 }
 
-class _CanteenOrdersScreenState extends State<CanteenOrdersScreen> with SingleTickerProviderStateMixin {
-  final _apiService = ApiService();
-  List<Order> _orders = [];
-  bool _isLoading = true;
-  String _selectedStatus = 'pending';
-  DateTime? _selectedDate;
+class _CanteenOrdersScreenState extends State<CanteenOrdersScreen>
+    with SingleTickerProviderStateMixin {
+  final ApiService _apiService = ApiService();
 
-  late AnimationController _animationController;
+  List<Map<String, dynamic>> _orders = [];
+  bool _isLoading = false;
+  String _selectedStatus = 'all';
+  late TabController _tabController;
 
-  final List<Map<String, dynamic>> _statusTabs = [
-    {'id': 'pending', 'name': 'Pending', 'icon': Icons.pending_actions, 'color': const Color(0xFFF59E0B)},
-    {'id': 'confirmed', 'name': 'Confirmed', 'icon': Icons.check_circle_outline, 'color': const Color(0xFF3B82F6)},
-    {'id': 'preparing', 'name': 'Preparing', 'icon': Icons.restaurant, 'color': const Color(0xFF8B5CF6)},
-    {'id': 'ready', 'name': 'Ready', 'icon': Icons.room_service, 'color': const Color(0xFF10B981)},
-    {'id': 'completed', 'name': 'Completed', 'icon': Icons.check_circle, 'color': const Color(0xFF6366F1)},
-    {'id': 'cancelled', 'name': 'Cancelled', 'icon': Icons.cancel, 'color': const Color(0xFFEF4444)},
+  final List<Map<String, String>> _tabs = [
+    {'label': 'All', 'value': 'all'},
+    {'label': 'Pending', 'value': 'pending'},
+    {'label': 'Confirmed', 'value': 'confirmed'},
+    {'label': 'Preparing', 'value': 'preparing'},
+    {'label': 'Ready', 'value': 'ready'},
+    {'label': 'Completed', 'value': 'completed'},
   ];
 
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
+    _tabController = TabController(length: _tabs.length, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        setState(() =>
+            _selectedStatus = _tabs[_tabController.index]['value']!);
+        _loadOrders();
+      }
+    });
     _loadOrders();
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _tabController.dispose();
     super.dispose();
   }
 
   Future<void> _loadOrders() async {
     setState(() => _isLoading = true);
-
-    final dateStr = _selectedDate != null
-        ? DateFormat('yyyy-MM-dd').format(_selectedDate!)
-        : null;
-
     final result = await _apiService.getCanteenOrders(
       status: _selectedStatus == 'all' ? null : _selectedStatus,
-      date: dateStr,
     );
-
-    if (result['success'] && mounted) {
+    if (mounted && result['success'] == true) {
       setState(() {
-        _orders = (result['orders'] as List)
-            .map((json) => Order.fromJson(json))
-            .toList();
+        _orders = List<Map<String, dynamic>>.from(result['orders'] ?? []);
         _isLoading = false;
       });
-      _animationController.forward();
     } else {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _updateOrderStatus(Order order, String newStatus) async {
-    setState(() => _isLoading = true);
-
-    DateTime? actualReadyTime;
-    if (newStatus == 'ready') {
-      actualReadyTime = DateTime.now();
-    }
-
+  Future<void> _updateStatus(String orderId, String newStatus) async {
     final result = await _apiService.updateOrderStatus(
-      orderId: order.id,
-      status: newStatus,
-      actualReadyTime: actualReadyTime,
-    );
-
-    setState(() => _isLoading = false);
-
-    if (result['success'] && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Order status updated to ${newStatus.toUpperCase()}'),
+        orderId: orderId, status: newStatus);
+    if (mounted) {
+      if (result['success'] == true) {
+        _loadOrders();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Order marked as $newStatus'),
           backgroundColor: const Color(0xFF10B981),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(20),
-        ),
-      );
-      _loadOrders();
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(result['message'] ?? 'Failed to update'),
+          backgroundColor: const Color(0xFFEF4444),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ));
+      }
     }
   }
 
-  Future<void> _selectDate() async {
-    final DateTime? picked = await showDatePicker(
+  // ── Show QR dialog ─────────────────────────────────────────────────────────
+  void _showQRDialog(Map<String, dynamic> order) {
+    final qrToken = order['qrCodeToken']?.toString() ?? '';
+    final orderNumber = order['orderNumber']?.toString() ?? '';
+    final items = List<Map<String, dynamic>>.from(order['items'] ?? []);
+    final total = (order['totalAmount'] ?? 0).toDouble();
+
+    if (qrToken.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('QR token not available for this order'),
+        backgroundColor: Color(0xFFEF4444),
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+
+    showDialog(
       context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF6366F1),
-              onPrimary: Colors.white,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      setState(() {
-        _selectedDate = picked;
-      });
-      _loadOrders();
-    }
-  }
-
-  String _formatTime(DateTime time) {
-    return DateFormat('hh:mm a').format(time);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F7),
-      body: Stack(
-        children: [
-          // Background decorative elements
-          Positioned(
-            top: -100,
-            right: -80,
+      barrierDismissible: true,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
             child: Container(
-              width: 280,
-              height: 280,
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF8B5CF6).withOpacity(0.08),
+                color: Colors.white.withOpacity(0.97),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(
+                    color: Colors.white.withOpacity(0.9), width: 1.5),
               ),
-            ),
-          ),
-          Positioned(
-            bottom: -120,
-            left: -100,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFF6366F1).withOpacity(0.06),
-              ),
-            ),
-          ),
-
-          SafeArea(
-            child: Column(
-              children: [
-                // Header with date filter
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.7),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: Colors.white.withOpacity(0.8),
-                                width: 1,
-                              ),
-                            ),
-                            child: IconButton(
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.arrow_back, color: Color(0xFF1F2937)),
-                            ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6366F1).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
                           ),
+                          child: const Icon(Icons.qr_code_2_rounded,
+                              color: Color(0xFF6366F1), size: 24),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      const Expanded(
-                        child: Text(
-                          'Orders',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF1F2937),
-                          ),
-                        ),
-                      ),
-                      InkWell(
-                        onTap: _selectDate,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(14),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.7),
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.8),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.calendar_today,
-                                    size: 16,
-                                    color: Color(0xFF6366F1),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _selectedDate == null
-                                        ? 'Today'
-                                        : DateFormat('dd MMM').format(_selectedDate!),
-                                    style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Color(0xFF1F2937),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Status tabs
-                Container(
-                  height: 50,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _statusTabs.length,
-                    itemBuilder: (context, index) {
-                      final tab = _statusTabs[index];
-                      final isSelected = _selectedStatus == tab['id'];
-
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 12),
-                        child: FilterChip(
-                          selected: isSelected,
-                          label: Row(
-                            mainAxisSize: MainAxisSize.min,
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(
-                                tab['icon'],
-                                size: 16,
-                                color: isSelected ? Colors.white : tab['color'],
-                              ),
-                              const SizedBox(width: 6),
-                              Text(tab['name']),
+                              Text('Order #$orderNumber',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1E293B),
+                                  ),
+                                  overflow: TextOverflow.ellipsis),
+                              Text('₹${total.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    color: Color(0xFF6366F1),
+                                    fontWeight: FontWeight.w600,
+                                  )),
                             ],
                           ),
-                          onSelected: (selected) {
-                            setState(() {
-                              _selectedStatus = tab['id'];
-                            });
-                            _loadOrders();
-                          },
-                          backgroundColor: Colors.white.withOpacity(0.7),
-                          selectedColor: tab['color'],
-                          checkmarkColor: Colors.white,
-                          labelStyle: TextStyle(
-                            color: isSelected ? Colors.white : tab['color'],
-                            fontSize: 14,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                          ),
                         ),
-                      );
-                    },
-                  ),
-                ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close_rounded,
+                              color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    // Items summary
+                    if (items.isNotEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          items
+                              .map((i) =>
+                                  '${i['name']} x${i['quantity']}')
+                              .join(', '),
+                          style: const TextStyle(
+                              fontSize: 13, color: Color(0xFF64748B)),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    const SizedBox(height: 24),
 
-                const SizedBox(height: 20),
+                    // QR Code
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                            color: const Color(0xFF6366F1).withOpacity(0.2),
+                            width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color:
+                                const Color(0xFF6366F1).withOpacity(0.1),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: QrImageView(
+                        data: qrToken,
+                        version: QrVersions.auto,
+                        size: 220,
+                        backgroundColor: Colors.white,
+                        errorCorrectionLevel: QrErrorCorrectLevel.H,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
 
-                // Orders list
-                Expanded(
-                  child: _isLoading
-                      ? const Center(child: CircularProgressIndicator(color: Color(0xFF6366F1)))
-                      : _orders.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.shopping_bag,
-                                    size: 80,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                  const SizedBox(height: 20),
-                                  Text(
-                                    'No orders found',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ],
+                    // Instruction
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                            color: const Color(0xFF10B981).withOpacity(0.2)),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline_rounded,
+                              color: Color(0xFF10B981), size: 20),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Ask the customer to scan this QR code to confirm collection',
+                              style: TextStyle(
+                                color: Color(0xFF10B981),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                height: 1.4,
                               ),
-                            )
-                          : ListView.builder(
-                              padding: const EdgeInsets.all(24),
-                              itemCount: _orders.length,
-                              itemBuilder: (context, index) {
-                                return _buildOrderCard(_orders[index], index);
-                              },
                             ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Close button
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6366F1),
+                          foregroundColor: Colors.white,
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 16),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                        child: const Text('Close',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildOrderCard(Order order, int index) {
-    final statusTab = _statusTabs.firstWhere(
-      (tab) => tab['id'] == order.status,
-      orElse: () => _statusTabs[0],
-    );
-
-    return TweenAnimationBuilder<double>(
-      duration: Duration(milliseconds: 400 + (index * 100)),
-      tween: Tween(begin: 0.0, end: 1.0),
-      curve: Curves.easeOutBack,
-      builder: (context, value, child) {
-        return Transform.scale(
-          scale: value.clamp(0.0, 1.0),
-          child: Opacity(
-            opacity: value.clamp(0.0, 1.0),
-            child: child,
+  // ── UI ─────────────────────────────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios,
+              color: Color(0xFF1E293B), size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Canteen Orders',
+          style: TextStyle(
+              color: Color(0xFF1E293B),
+              fontSize: 20,
+              fontWeight: FontWeight.w700),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded,
+                color: Color(0xFF6366F1)),
+            onPressed: _loadOrders,
+            tooltip: 'Refresh',
           ),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.7),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: statusTab['color'].withOpacity(0.3),
-            width: 1.5,
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          isScrollable: true,
+          indicatorColor: const Color(0xFF6366F1),
+          indicatorWeight: 3,
+          labelColor: const Color(0xFF6366F1),
+          unselectedLabelColor: const Color(0xFF94A3B8),
+          labelStyle: const TextStyle(
+              fontWeight: FontWeight.w700, fontSize: 13),
+          unselectedLabelStyle: const TextStyle(
+              fontWeight: FontWeight.w500, fontSize: 13),
+          tabs: _tabs.map((t) => Tab(text: t['label'])).toList(),
+        ),
+      ),
+      body: SafeArea(
+        child: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                    color: Color(0xFF6366F1), strokeWidth: 3))
+            : RefreshIndicator(
+                onRefresh: _loadOrders,
+                color: const Color(0xFF6366F1),
+                child: _orders.isEmpty
+                    ? _buildEmptyState()
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: _orders.length,
+                        itemBuilder: (context, index) =>
+                            _buildOrderCard(_orders[index]),
+                      ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return ListView(
+      children: [
+        SizedBox(
+          height: MediaQuery.of(context).size.height * 0.6,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.receipt_long_rounded,
+                    size: 72,
+                    color: const Color(0xFF6366F1).withOpacity(0.3)),
+                const SizedBox(height: 16),
+                const Text('No orders found',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF64748B))),
+                const SizedBox(height: 8),
+                const Text('Pull down to refresh',
+                    style: TextStyle(
+                        fontSize: 14, color: Color(0xFF94A3B8))),
+              ],
+            ),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildOrderCard(Map<String, dynamic> order) {
+    final orderId = order['_id']?.toString() ?? '';
+    final orderNumber = order['orderNumber']?.toString() ?? '';
+    final status = order['status']?.toString() ?? '';
+    final items = List<Map<String, dynamic>>.from(order['items'] ?? []);
+    final total = (order['totalAmount'] ?? 0).toDouble();
+    final userName = order['user']?['name']?.toString() ??
+        order['user']?['username']?.toString() ?? 'User';
+    final notes = order['notes']?.toString() ?? '';
+
+    final statusColor = _statusColor(status);
+    final statusBg = statusColor.withOpacity(0.1);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Order header
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: statusTab['color'].withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    statusTab['icon'],
-                    color: statusTab['color'],
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        order.orderNumber,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1F2937),
-                        ),
-                      ),
+                      Text('Order #$orderNumber',
+                          style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1E293B)),
+                          overflow: TextOverflow.ellipsis),
                       const SizedBox(height: 2),
-                      Text(
-                        order.userName,
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
+                      Text(userName,
+                          style: const TextStyle(
+                              fontSize: 13, color: Color(0xFF64748B)),
+                          overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: statusTab['color'].withOpacity(0.1),
+                    color: statusBg,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    order.statusDisplay,
+                    status.toUpperCase(),
                     style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: statusTab['color'],
-                    ),
+                        color: statusColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5),
                   ),
                 ),
               ],
             ),
-
-            const SizedBox(height: 16),
-
-            // Items
-            ...order.items.map((item) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Text(
-                    '${item.quantity}x',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF6366F1),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      item.name,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF1F2937),
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '₹${item.totalPrice.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1F2937),
-                    ),
-                  ),
-                ],
-              ),
-            )),
-
-            const Divider(height: 20),
-
-            // Order info
-            Row(
-              children: [
-                const Icon(Icons.access_time, size: 16, color: Color(0xFF64748B)),
-                const SizedBox(width: 4),
-                Text(
-                  'Requested: ${_formatTime(order.requestedTime)}',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                ),
-                const SizedBox(width: 16),
-                const Icon(Icons.schedule, size: 16, color: Color(0xFF10B981)),
-                const SizedBox(width: 4),
-                Text(
-                  'Ready by: ${_formatTime(order.estimatedReadyTime)}',
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF10B981)),
-                ),
-              ],
-            ),
-
             const SizedBox(height: 12),
 
-            // Payment info
+            // Items
+            ...items.map((item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${item['name']} × ${item['quantity']}',
+                          style: const TextStyle(
+                              fontSize: 14, color: Color(0xFF334155)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        '₹${((item['price'] ?? 0) * (item['quantity'] ?? 1)).toStringAsFixed(2)}',
+                        style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF1E293B)),
+                      ),
+                    ],
+                  ),
+                )),
+
+            if (notes.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B).withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text('📝 $notes',
+                    style: const TextStyle(
+                        fontSize: 13, color: Color(0xFFF59E0B)),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ],
+
+            const Divider(height: 20, color: Color(0xFFF1F5F9)),
+
+            // Total + actions
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: order.paymentMethod == 'wallet'
-                        ? const Color(0xFF6366F1).withOpacity(0.1)
-                        : const Color(0xFFF59E0B).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    order.paymentMethod == 'wallet' ? 'Wallet' : 'Razorpay',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: order.paymentMethod == 'wallet'
-                          ? const Color(0xFF6366F1)
-                          : const Color(0xFFF59E0B),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: order.isPaid
-                        ? const Color(0xFF10B981).withOpacity(0.1)
-                        : const Color(0xFFEF4444).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    order.paymentStatus.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: order.isPaid ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  'Total: ₹${order.totalAmount.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF6366F1),
-                  ),
+                Text('Total: ₹${total.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1E293B))),
+                Row(
+                  children: [
+                    // Status action button
+                    if (_nextStatus(status) != null)
+                      _ActionButton(
+                        label: _nextStatusLabel(status),
+                        color: statusColor,
+                        onTap: () =>
+                            _updateStatus(orderId, _nextStatus(status)!),
+                      ),
+
+                    // Show QR button — only for ready orders
+                    if (status == 'ready') ...[
+                      const SizedBox(width: 8),
+                      _ActionButton(
+                        label: 'Show QR',
+                        color: const Color(0xFF6366F1),
+                        icon: Icons.qr_code_2_rounded,
+                        onTap: () => _showQRDialog(order),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
 
-            const SizedBox(height: 16),
+  String? _nextStatus(String current) {
+    switch (current) {
+      case 'pending':
+        return 'confirmed';
+      case 'confirmed':
+        return 'preparing';
+      case 'preparing':
+        return 'ready';
+      default:
+        return null;
+    }
+  }
 
-            // Action buttons based on status
-            if (order.status == 'pending')
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => _updateOrderStatus(order, 'confirmed'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF3B82F6),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text('Confirm'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => _updateOrderStatus(order, 'cancelled'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFFEF4444),
-                        side: const BorderSide(color: Color(0xFFEF4444)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: const Text('Reject'),
-                    ),
-                  ),
-                ],
-              ),
+  String _nextStatusLabel(String current) {
+    switch (current) {
+      case 'pending':
+        return 'Confirm';
+      case 'confirmed':
+        return 'Preparing';
+      case 'preparing':
+        return 'Ready';
+      default:
+        return '';
+    }
+  }
 
-            if (order.status == 'confirmed')
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _updateOrderStatus(order, 'preparing'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CF6),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text('Start Preparing'),
-                ),
-              ),
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'pending':
+        return const Color(0xFFF59E0B);
+      case 'confirmed':
+        return const Color(0xFF6366F1);
+      case 'preparing':
+        return const Color(0xFF8B5CF6);
+      case 'ready':
+        return const Color(0xFF10B981);
+      case 'completed':
+        return const Color(0xFF64748B);
+      case 'cancelled':
+        return const Color(0xFFEF4444);
+      default:
+        return const Color(0xFF94A3B8);
+    }
+  }
+}
 
-            if (order.status == 'preparing')
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => _updateOrderStatus(order, 'ready'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: const Text('Mark Ready'),
-                ),
-              ),
+class _ActionButton extends StatelessWidget {
+  final String label;
+  final Color color;
+  final IconData? icon;
+  final VoidCallback onTap;
 
-            if (order.status == 'ready')
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.qr_code_scanner, color: Color(0xFF10B981)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'QR Token: ${order.qrCodeToken?.substring(0, 8)}...',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF10B981),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+  const _ActionButton({
+    required this.label,
+    required this.color,
+    this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 5),
+            ],
+            Text(label,
+                style: TextStyle(
+                    color: color,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700)),
           ],
         ),
       ),

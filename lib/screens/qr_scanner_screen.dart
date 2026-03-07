@@ -1,10 +1,17 @@
+// lib/screens/qr_scanner_screen.dart
+//
+// USER scans the QR code displayed by the CANTEEN to confirm order collection.
+// Flow:
+//   1. Canteen shows QR for a ready order (CanteenOrdersScreen "Show QR" button)
+//   2. User opens this screen from MyOrdersScreen or HomeScreen
+//   3. User scans the QR → POST /api/orders/verify-qr { qrToken }
+//   4. Backend marks order as "completed"
+//   5. Success dialog shown, returns to previous screen
+
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:encrypt/encrypt.dart' as encrypt;
 import 'dart:ui';
-import 'package:flutter_tts/flutter_tts.dart';
 import '../services/api_service.dart';
-import 'package:audioplayers/audioplayers.dart';
 
 class QRScannerScreen extends StatefulWidget {
   const QRScannerScreen({super.key});
@@ -13,465 +20,101 @@ class QRScannerScreen extends StatefulWidget {
   State<QRScannerScreen> createState() => _QRScannerScreenState();
 }
 
-class _QRScannerScreenState extends State<QRScannerScreen> {
-  final MobileScannerController controller = MobileScannerController();
-  final _apiService = ApiService();
+class _QRScannerScreenState extends State<QRScannerScreen>
+    with SingleTickerProviderStateMixin {
+  final MobileScannerController _controller = MobileScannerController();
+  final ApiService _apiService = ApiService();
 
   bool _isProcessing = false;
+  bool _hasScanned = false;
 
-  // Encryption key and IV (use same values for encryption/decryption)
-  static const String SECRET_TEXT = "HarshandZeeshan";
-  static const String ENCRYPTION_KEY = "my32lengthsupersecretnooneknows1"; // Must be 32 chars
-  static const String IV_STRING = "my16lengthivhere"; // Must be 16 chars
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
 
-  String _encryptText(String plainText) {
-    final key = encrypt.Key.fromUtf8(ENCRYPTION_KEY);
-    final iv = encrypt.IV.fromUtf8(IV_STRING);
-    final encrypter = encrypt.Encrypter(encrypt.AES(key));
-
-    final encrypted = encrypter.encrypt(plainText, iv: iv);
-    return encrypted.base64;
-  }
-
-  String _decryptText(String encryptedText) {
-    try {
-      final key = encrypt.Key.fromUtf8(ENCRYPTION_KEY);
-      final iv = encrypt.IV.fromUtf8(IV_STRING);
-      final encrypter = encrypt.Encrypter(encrypt.AES(key));
-
-      final decrypted = encrypter.decrypt64(encryptedText, iv: iv);
-      return decrypted;
-    } catch (e) {
-      return '';
-    }
-  }
-
-  bool _validateQRCode(String qrData) {
-    try {
-      final decryptedText = _decryptText(qrData);
-      return decryptedText == SECRET_TEXT;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  void _onDetect(BarcodeCapture capture) {
-    if (_isProcessing) return;
-
-    final List<Barcode> barcodes = capture.barcodes;
-    if (barcodes.isEmpty) return;
-
-    final String? code = barcodes.first.rawValue;
-    if (code == null) return;
-
-    _handleQRScan(code);
-  }
-
-  Future<void> _handleQRScan(String qrData) async {
-    if (_isProcessing) return;
-
-    setState(() => _isProcessing = true);
-    controller.stop();
-
-    // Validate QR code first
-    if (!_validateQRCode(qrData)) {
-      // Invalid QR code
-      await showDialog(
-        context: context,
-        builder: (context) => Dialog(
-          backgroundColor: Colors.transparent,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(28),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-              child: Container(
-                padding: const EdgeInsets.all(32),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.95),
-                  borderRadius: BorderRadius.circular(28),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.9),
-                    width: 1.5,
-                  ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444).withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.cancel_rounded,
-                        color: Color(0xFFEF4444),
-                        size: 64,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Invalid QR Code',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF1F2937),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'This QR code is not valid for payment',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          setState(() => _isProcessing = false);
-                          controller.start();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFEF4444),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          elevation: 0,
-                        ),
-                        child: const Text(
-                          'Try Again',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-
-    // QR is valid, now get payment details from user
-    final paymentDetails = await _showPaymentInputDialog();
-
-    if (paymentDetails == null) {
-      // User cancelled
-      setState(() => _isProcessing = false);
-      controller.start();
-      return;
-    }
-
-    // Process payment with user input
-    await _processPayment(
-      paymentDetails['amount']!,
-      paymentDetails['description']!,
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat(reverse: true);
+    _pulseAnimation = Tween<double>(begin: 0.6, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-  }
-
-  Future<Map<String, String>?> _showPaymentInputDialog() async {
-    final amountController = TextEditingController();
-    final descriptionController = TextEditingController();
-
-    return await showDialog<Map<String, String>>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-            child: Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.95),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(
-                  color: Colors.white.withOpacity(0.9),
-                  width: 1.5,
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.payment_rounded,
-                          color: Color(0xFF6366F1),
-                          size: 28,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      const Text(
-                        'Payment',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1F2937),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Enter payment information',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  TextField(
-                    controller: amountController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1F2937),
-                    ),
-                    decoration: InputDecoration(
-                      labelText: 'Amount',
-                      labelStyle: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 15,
-                      ),
-                      prefixText: '₹ ',
-                      prefixStyle: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF6366F1),
-                      ),
-                      hintText: '0.00',
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(
-                          color: Colors.grey.shade300,
-                          width: 1,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF6366F1),
-                          width: 2,
-                        ),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 18,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  TextField(
-                    controller: descriptionController,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF1F2937),
-                    ),
-                    decoration: InputDecoration(
-                      labelText: 'Description',
-                      labelStyle: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 15,
-                      ),
-                      hintText: 'e.g., Food payment, Snacks, etc.',
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(
-                          color: Colors.grey.shade300,
-                          width: 1,
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: const BorderSide(
-                          color: Color(0xFF6366F1),
-                          width: 2,
-                        ),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 18,
-                      ),
-                    ),
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 28),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(context, null),
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                          child: Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            if (amountController.text.isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Please enter amount')),
-                              );
-                              return;
-                            }
-                            Navigator.pop(context, {
-                              'amount': amountController.text,
-                              'description': descriptionController.text.isEmpty
-                                  ? 'Food payment'
-                                  : descriptionController.text,
-                            });
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF6366F1),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: const Text(
-                            'Confirm',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _processPayment(String amountStr, String description) async {
-    try {
-      final amount = double.parse(amountStr);
-
-      final result = await _apiService.makePayment(
-        amount: amount,
-        description: description,
-      );
-
-      if (!mounted) return;
-
-      if (result['success']) {
-        // Play success sound
-        final player = AudioPlayer();
-        await player.play(AssetSource('sounds/success.mp3'));
-
-        // Text-to-speech announcement
-        final flutterTts = FlutterTts();
-        await flutterTts.setLanguage('en-US');
-        await flutterTts.setSpeechRate(0.5);
-        await flutterTts.speak(
-          'Payment successful. Amount rupees ${amount.toStringAsFixed(2)} deducted. '
-              'Remaining balance rupees ${result['balance'].toStringAsFixed(2)}',
-        );
-
-        // Show success dialog
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => _SuccessDialog(
-            amount: amount.toStringAsFixed(2),
-            balance: result['balance'].toStringAsFixed(2),
-          ),
-        );
-
-        // Return to home screen
-        if (mounted) {
-          Navigator.pop(context, true);
-        }
-      } else {
-        // Show error
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Payment failed'),
-            backgroundColor: const Color(0xFFEF4444),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(20),
-          ),
-        );
-        setState(() => _isProcessing = false);
-        controller.start();
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Invalid amount: $e'),
-          backgroundColor: const Color(0xFFEF4444),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(20),
-        ),
-      );
-      setState(() => _isProcessing = false);
-      controller.start();
-    }
   }
 
   @override
   void dispose() {
-    controller.dispose();
+    _controller.dispose();
+    _pulseController.dispose();
     super.dispose();
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_isProcessing || _hasScanned) return;
+    final code = capture.barcodes.firstOrNull?.rawValue;
+    if (code == null || code.isEmpty) return;
+    _handleScan(code);
+  }
+
+  Future<void> _handleScan(String qrToken) async {
+    setState(() {
+      _isProcessing = true;
+      _hasScanned = true;
+    });
+    _controller.stop();
+    _pulseController.stop();
+
+    final result = await _apiService.verifyQRAndCompleteOrder(qrToken);
+
+    if (!mounted) return;
+
+    if (result['success'] == true) {
+      await _showSuccessDialog(result);
+    } else {
+      await _showErrorDialog(result['message'] ?? 'Invalid or expired QR code');
+    }
+  }
+
+  Future<void> _showSuccessDialog(Map<String, dynamic> result) async {
+    final orderNumber = result['order']?['orderNumber']?.toString() ?? '';
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _ResultDialog(
+        success: true,
+        title: 'Order Collected!',
+        subtitle: orderNumber.isNotEmpty ? 'Order #$orderNumber' : '',
+        message: 'Your order has been marked as collected. Enjoy your meal!',
+        buttonLabel: 'Done',
+        onPressed: () {
+          Navigator.pop(context);       // close dialog
+          Navigator.pop(context, true); // return to caller with success=true
+        },
+      ),
+    );
+  }
+
+  Future<void> _showErrorDialog(String message) async {
+    await showDialog(
+      context: context,
+      builder: (_) => _ResultDialog(
+        success: false,
+        title: 'Scan Failed',
+        subtitle: '',
+        message: message,
+        buttonLabel: 'Try Again',
+        onPressed: () {
+          Navigator.pop(context);
+          setState(() {
+            _isProcessing = false;
+            _hasScanned = false;
+          });
+          _pulseController.repeat(reverse: true);
+          _controller.start();
+        },
+      ),
+    );
   }
 
   @override
@@ -480,69 +123,54 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Camera view
-          MobileScanner(
-            controller: controller,
-            onDetect: _onDetect,
+          // Camera
+          MobileScanner(controller: _controller, onDetect: _onDetect),
+
+          // Dark overlay with transparent cutout
+          CustomPaint(
+            size: MediaQuery.of(context).size,
+            painter: _OverlayPainter(),
           ),
 
-          // Top header with glassmorphism
+          // Top header
           Positioned(
             top: 0,
             left: 0,
             right: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                 child: Row(
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.5),
-                              width: 1,
-                            ),
-                          ),
-                          child: IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            icon: const Icon(
-                              Icons.arrow_back_rounded,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
+                    _GlassButton(
+                      onTap: () => Navigator.pop(context),
+                      child: const Icon(Icons.arrow_back_rounded,
+                          color: Colors.white, size: 22),
                     ),
-                    const SizedBox(width: 16),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: BackdropFilter(
-                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.3),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.5),
-                              width: 1,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: BackdropFilter(
+                          filter:
+                              ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 18, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                  color: Colors.white.withOpacity(0.3)),
                             ),
-                          ),
-                          child: const Text(
-                            'Scan QR Code',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                            child: const Text(
+                              'Scan Order QR Code',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),
@@ -554,95 +182,65 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
             ),
           ),
 
-          // Scanning frame
+          // Animated scanning frame
           Center(
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: const Color(0xFF6366F1),
-                  width: 3,
+            child: AnimatedBuilder(
+              animation: _pulseAnimation,
+              builder: (context, _) => Opacity(
+                opacity:
+                    _isProcessing ? 1.0 : _pulseAnimation.value,
+                child: SizedBox(
+                  width: 270,
+                  height: 270,
+                  child: Stack(children: [
+                    // Border
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: _isProcessing
+                              ? Colors.white
+                              : const Color(0xFF6366F1),
+                          width: 3,
+                        ),
+                      ),
+                    ),
+                    // Corners
+                    _FrameCorner(top: -3, left: -3,
+                        isProcessing: _isProcessing,
+                        radius: const BorderRadius.only(
+                            topLeft: Radius.circular(24))),
+                    _FrameCorner(top: -3, right: -3,
+                        isProcessing: _isProcessing,
+                        radius: const BorderRadius.only(
+                            topRight: Radius.circular(24))),
+                    _FrameCorner(bottom: -3, left: -3,
+                        isProcessing: _isProcessing,
+                        radius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(24))),
+                    _FrameCorner(bottom: -3, right: -3,
+                        isProcessing: _isProcessing,
+                        radius: const BorderRadius.only(
+                            bottomRight: Radius.circular(24))),
+                  ]),
                 ),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Stack(
-                children: [
-                  // Corner decorations
-                  Positioned(
-                    top: -3,
-                    left: -3,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF6366F1),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(24),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: -3,
-                    right: -3,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF6366F1),
-                        borderRadius: BorderRadius.only(
-                          topRight: Radius.circular(24),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: -3,
-                    left: -3,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF6366F1),
-                        borderRadius: BorderRadius.only(
-                          bottomLeft: Radius.circular(24),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    bottom: -3,
-                    right: -3,
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF6366F1),
-                        borderRadius: BorderRadius.only(
-                          bottomRight: Radius.circular(24),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
 
-          // Bottom instruction with glassmorphism
+          // Bottom instruction
           Positioned(
             bottom: 0,
             left: 0,
             right: 0,
             child: Container(
-              padding: const EdgeInsets.only(bottom: 50, top: 30),
+              padding: const EdgeInsets.only(bottom: 56, top: 32),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
                   colors: [
-                    Colors.black.withOpacity(0.8),
+                    Colors.black.withOpacity(0.85),
                     Colors.transparent,
                   ],
                 ),
@@ -652,35 +250,33 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(20),
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      filter:
+                          ImageFilter.blur(sigmaX: 10, sigmaY: 10),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 24,
-                          vertical: 16,
-                        ),
+                            horizontal: 24, vertical: 14),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withOpacity(0.3),
+                          color:
+                              const Color(0xFF6366F1).withOpacity(0.35),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.3),
-                            width: 1,
-                          ),
+                              color: Colors.white.withOpacity(0.25)),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.qr_code_scanner_rounded,
-                              color: Colors.white,
-                              size: 24,
-                            ),
-                            SizedBox(width: 12),
-                            Text(
-                              'Scan QR Code to Pay',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                            Icon(Icons.qr_code_scanner_rounded,
+                                color: Colors.white, size: 22),
+                            SizedBox(width: 10),
+                            Flexible(
+                              child: Text(
+                                'Scan QR shown by canteen',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ],
@@ -688,13 +284,12 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   Text(
-                    'Align the QR code within the frame',
+                    "Point camera at canteen's screen",
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 14,
-                    ),
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 13),
                   ),
                 ],
               ),
@@ -704,38 +299,32 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           // Processing overlay
           if (_isProcessing)
             Container(
-              color: Colors.black.withOpacity(0.8),
+              color: Colors.black.withOpacity(0.75),
               child: Center(
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(24),
                   child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                    filter:
+                        ImageFilter.blur(sigmaX: 15, sigmaY: 15),
                     child: Container(
                       padding: const EdgeInsets.all(32),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 1,
-                        ),
+                            color: Colors.white.withOpacity(0.3)),
                       ),
                       child: const Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 3,
-                          ),
+                              color: Colors.white, strokeWidth: 3),
                           SizedBox(height: 20),
-                          Text(
-                            'Processing...',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                          Text('Verifying...',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold)),
                         ],
                       ),
                     ),
@@ -749,179 +338,244 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   }
 }
 
-// Animated Success Dialog Widget with Glassmorphism
-class _SuccessDialog extends StatefulWidget {
-  final String amount;
-  final String balance;
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-  const _SuccessDialog({
-    required this.amount,
-    required this.balance,
+class _GlassButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final Widget child;
+  const _GlassButton({required this.onTap, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(14),
+              border:
+                  Border.all(color: Colors.white.withOpacity(0.3)),
+            ),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FrameCorner extends StatelessWidget {
+  final double? top, bottom, left, right;
+  final bool isProcessing;
+  final BorderRadius radius;
+  const _FrameCorner(
+      {this.top,
+      this.bottom,
+      this.left,
+      this.right,
+      required this.isProcessing,
+      required this.radius});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      top: top,
+      bottom: bottom,
+      left: left,
+      right: right,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: isProcessing ? Colors.white : const Color(0xFF6366F1),
+          borderRadius: radius,
+        ),
+      ),
+    );
+  }
+}
+
+// ── Dark overlay with transparent scanning cutout ─────────────────────────────
+class _OverlayPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.black.withOpacity(0.55);
+    const frameSize = 270.0;
+    const radius = 24.0;
+    final left = (size.width - frameSize) / 2;
+    final top = (size.height - frameSize) / 2;
+    final cutout = RRect.fromLTRBR(
+      left, top, left + frameSize, top + frameSize,
+      const Radius.circular(radius),
+    );
+    final path = Path()
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..addRRect(cutout)
+      ..fillType = PathFillType.evenOdd;
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_OverlayPainter old) => false;
+}
+
+// ── Animated result dialog ────────────────────────────────────────────────────
+class _ResultDialog extends StatefulWidget {
+  final bool success;
+  final String title;
+  final String subtitle;
+  final String message;
+  final String buttonLabel;
+  final VoidCallback onPressed;
+
+  const _ResultDialog({
+    required this.success,
+    required this.title,
+    required this.subtitle,
+    required this.message,
+    required this.buttonLabel,
+    required this.onPressed,
   });
 
   @override
-  State<_SuccessDialog> createState() => _SuccessDialogState();
+  State<_ResultDialog> createState() => _ResultDialogState();
 }
 
-class _SuccessDialogState extends State<_SuccessDialog>
+class _ResultDialogState extends State<_ResultDialog>
     with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _checkAnimation;
+  late AnimationController _ctrl;
+  late Animation<double> _scale;
+  late Animation<double> _fade;
 
   @override
   void initState() {
     super.initState();
-
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-
-    _scaleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.0, 0.5, curve: Curves.elasticOut),
-      ),
-    );
-
-    _checkAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.3, 1.0, curve: Curves.easeOut),
-      ),
-    );
-
-    _controller.forward();
+    _ctrl = AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 600));
+    _scale = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.0, 0.6, curve: Curves.elasticOut)));
+    _fade = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(
+        parent: _ctrl,
+        curve: const Interval(0.4, 1.0, curve: Curves.easeOut)));
+    _ctrl.forward();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _ctrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: ScaleTransition(
-            scale: _scaleAnimation,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(28),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                child: Container(
-                  padding: const EdgeInsets.all(32),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.95),
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.9),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Animated Check Icon
-                      Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: ScaleTransition(
-                          scale: _checkAnimation,
-                          child: const Icon(
-                            Icons.check_circle_rounded,
-                            color: Color(0xFF10B981),
-                            size: 80,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 24),
+    final color = widget.success
+        ? const Color(0xFF10B981)
+        : const Color(0xFFEF4444);
+    final icon = widget.success
+        ? Icons.check_circle_rounded
+        : Icons.cancel_rounded;
 
-                      // Success Text
-                      FadeTransition(
-                        opacity: _checkAnimation,
-                        child: Column(
-                          children: [
-                            const Text(
-                              'Payment Successful!',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF1F2937),
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              '₹${widget.amount} deducted',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey.shade700,
-                              ),
-                            ),
-                            const SizedBox(height: 20),
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, _) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: ScaleTransition(
+          scale: _scale,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+              child: Container(
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(
+                      color: Colors.white.withOpacity(0.9), width: 1.5),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 90,
+                      height: 90,
+                      decoration: BoxDecoration(
+                          color: color.withOpacity(0.1),
+                          shape: BoxShape.circle),
+                      child: Icon(icon, color: color, size: 72),
+                    ),
+                    const SizedBox(height: 20),
+                    FadeTransition(
+                      opacity: _fade,
+                      child: Column(
+                        children: [
+                          Text(widget.title,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1F2937))),
+                          if (widget.subtitle.isNotEmpty) ...[
+                            const SizedBox(height: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 14,
-                              ),
+                                  horizontal: 16, vertical: 6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF6366F1).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(16),
+                                color: color.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(20),
                               ),
-                              child: Text(
-                                'Remaining: ₹${widget.balance}',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF6366F1),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 28),
-                            // Back Button
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: () => Navigator.pop(context),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF6366F1),
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  elevation: 0,
-                                ),
-                                child: const Text(
-                                  'Back to Home',
+                              child: Text(widget.subtitle,
                                   style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
+                                      color: color,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14)),
                             ),
                           ],
-                        ),
+                          const SizedBox(height: 12),
+                          Text(widget.message,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  color: Colors.grey.shade600,
+                                  height: 1.4)),
+                          const SizedBox(height: 28),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: widget.onPressed,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: color,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 16),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(16)),
+                              ),
+                              child: Text(widget.buttonLabel,
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
