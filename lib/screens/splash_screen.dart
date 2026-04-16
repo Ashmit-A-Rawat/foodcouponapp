@@ -284,7 +284,7 @@ class _SplashScreenState extends State<SplashScreen>
 
                       // Title
                       const Text(
-                        'Metro Food',
+                        'Food Nexus',
                         style: TextStyle(
                           fontSize: 48,
                           fontWeight: FontWeight.bold,
