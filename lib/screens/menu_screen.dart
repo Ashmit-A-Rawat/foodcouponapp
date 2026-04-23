@@ -18,7 +18,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
   List<MenuItem> _filteredItems = [];
   bool _isLoading = true;
   String _selectedCategory = 'all';
-  final Map<String, int> _cart = {}; // itemId -> quantity
+  final Map<String, int> _cart = {};
 
   late AnimationController _animationController;
 
@@ -87,7 +87,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Item added to cart'),
+        content: Text('Item added to cart', style: TextStyle(fontSize: 16)),
         backgroundColor: Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -153,7 +153,6 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
         ),
       ),
     ).then((_) {
-      // Refresh cart after order placement
       setState(() {
         _cart.clear();
       });
@@ -166,7 +165,6 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
       backgroundColor: Color(0xFFF5F5F7),
       body: Stack(
         children: [
-          // Background decorative elements
           Positioned(
             top: -100,
             right: -80,
@@ -195,7 +193,6 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
           SafeArea(
             child: Column(
               children: [
-                // Header
                 Padding(
                   padding: EdgeInsets.all(24),
                   child: Row(
@@ -231,7 +228,6 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
-                      // Cart button
                       Stack(
                         children: [
                           ClipRRect(
@@ -285,7 +281,6 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                   ),
                 ),
 
-                // Category chips
                 Container(
                   height: 50,
                   padding: EdgeInsets.symmetric(horizontal: 24),
@@ -345,7 +340,6 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
 
                 SizedBox(height: 20),
 
-                // Menu items grid
                 Expanded(
                   child: _isLoading
                       ? Center(
@@ -380,7 +374,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                               padding: EdgeInsets.fromLTRB(24, 0, 24, 100),
                               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 2,
-                                childAspectRatio: 0.75,
+                                childAspectRatio: 0.7,
                                 crossAxisSpacing: 16,
                                 mainAxisSpacing: 16,
                               ),
@@ -396,7 +390,6 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
             ),
           ),
 
-          // Cart bottom bar
           if (_getCartCount() > 0)
             Positioned(
               bottom: 20,
@@ -458,7 +451,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                               borderRadius: BorderRadius.circular(20),
                             ),
                             elevation: 0,
-                            minimumSize: Size(120, 48), // Increased button size
+                            minimumSize: Size(120, 48),
                           ),
                           child: Text(
                             'View Cart',
@@ -493,207 +486,197 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
           ),
         );
       },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.7),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.5),
-                width: 1,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 120,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: item.categoryColor.withOpacity(0.15),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Stack(
+                children: [
+                  Center(
+                    child: Icon(
+                      item.categoryIcon,
+                      size: 50,
+                      color: item.categoryColor,
+                    ),
+                  ),
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: item.categoryColor,
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Text(
+                        item.categoryDisplay,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Item image placeholder with category color
-                Container(
-                  height: 100,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: item.categoryColor.withOpacity(0.2),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            Padding(
+              padding: EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.name,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1F2937),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: Icon(
-                          item.categoryIcon,
-                          size: 40,
-                          color: item.categoryColor,
-                        ),
-                      ),
-                      // Category badge
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: item.categoryColor,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            item.categoryDisplay,
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  SizedBox(height: 4),
+                  Text(
+                    item.description,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-
-                Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  SizedBox(height: 8),
+                  Row(
                     children: [
-                      Text(
-                        item.name,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1F2937),
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Icon(
+                        Icons.timer,
+                        size: 14,
+                        color: Color(0xFFF59E0B),
                       ),
-                      SizedBox(height: 4),
+                      SizedBox(width: 4),
                       Text(
-                        item.description,
+                        '${item.preparationTime} min',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           color: Colors.grey.shade600,
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(
-                            Icons.timer,
-                            size: 14,
-                            color: Color(0xFFF59E0B),
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            '${item.preparationTime} min',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            '₹${item.price.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF6366F1),
-                            ),
-                          ),
-                          // Improved Add to Cart Button Area
-                          if (cartQuantity > 0)
-                            Container(
-                              height: 36, // Fixed height for better touch target
-                              decoration: BoxDecoration(
-                                color: Color(0xFF6366F1),
-                                borderRadius: BorderRadius.circular(24),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  SizedBox(width: 4),
-                                  InkWell(
-                                    onTap: () => _removeFromCart(item.id),
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: Container(
-                                      padding: EdgeInsets.all(8),
-                                      child: Icon(
-                                        Icons.remove,
-                                        color: Colors.white,
-                                        size: 18,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    '$cartQuantity',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  SizedBox(width: 8),
-                                  InkWell(
-                                    onTap: () => _addToCart(item.id),
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: Container(
-                                      padding: EdgeInsets.all(8),
-                                      child: Icon(
-                                        Icons.add,
-                                        color: Colors.white,
-                                        size: 18,
-                                      ),
-                                    ),
-                                  ),
-                                  SizedBox(width: 4),
-                                ],
-                              ),
-                            )
-                          else
-                            ElevatedButton(
-                              onPressed: () => _addToCart(item.id),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Color(0xFF6366F1),
-                                foregroundColor: Colors.white,
-                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(24),
-                                ),
-                                minimumSize: Size(80, 36), // Larger minimum size
-                                elevation: 0,
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.add_shopping_cart,
-                                    size: 16,
-                                  ),
-                                  SizedBox(width: 4),
-                                  Text(
-                                    'Add',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
                       ),
                     ],
                   ),
-                ),
-              ],
+                  SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '₹${item.price.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF6366F1),
+                        ),
+                      ),
+                      // BIG VISIBLE ADD BUTTON
+                      if (cartQuantity > 0)
+                        Container(
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Color(0xFF6366F1),
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () => _removeFromCart(item.id),
+                                child: Container(
+                                  padding: EdgeInsets.all(8),
+                                  child: Icon(
+                                    Icons.remove,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 12),
+                              Text(
+                                '$cartQuantity',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              SizedBox(width: 12),
+                              GestureDetector(
+                                onTap: () => _addToCart(item.id),
+                                child: Container(
+                                  padding: EdgeInsets.all(8),
+                                  child: Icon(
+                                    Icons.add,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                            ],
+                          ),
+                        )
+                      else
+                        ElevatedButton(
+                          onPressed: () => _addToCart(item.id),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Color(0xFF6366F1),
+                            foregroundColor: Colors.white,
+                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                            minimumSize: Size(90, 44),
+                            elevation: 2,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.add, size: 20),
+                              SizedBox(width: 6),
+                              Text(
+                                'ADD',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
