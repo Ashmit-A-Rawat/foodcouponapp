@@ -81,13 +81,14 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
   }
 
   void _addToCart(String itemId) {
+    print("ADD TO CART TAPPED: $itemId"); // Debug print
     setState(() {
       _cart[itemId] = (_cart[itemId] ?? 0) + 1;
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Item added to cart', style: TextStyle(fontSize: 16)),
+        content: Text('✓ Added to cart', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         backgroundColor: Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -98,6 +99,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
   }
 
   void _removeFromCart(String itemId) {
+    print("REMOVE FROM CART TAPPED: $itemId"); // Debug print
     setState(() {
       if (_cart.containsKey(itemId)) {
         if (_cart[itemId]! > 1) {
@@ -165,6 +167,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
       backgroundColor: Color(0xFFF5F5F7),
       body: Stack(
         children: [
+          // Background decorative elements
           Positioned(
             top: -100,
             right: -80,
@@ -193,6 +196,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
           SafeArea(
             child: Column(
               children: [
+                // Header
                 Padding(
                   padding: EdgeInsets.all(24),
                   child: Row(
@@ -228,6 +232,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                           ),
                         ),
                       ),
+                      // Cart button
                       Stack(
                         children: [
                           ClipRRect(
@@ -281,6 +286,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                   ),
                 ),
 
+                // Category chips
                 Container(
                   height: 50,
                   padding: EdgeInsets.symmetric(horizontal: 24),
@@ -340,6 +346,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
 
                 SizedBox(height: 20),
 
+                // Menu items grid
                 Expanded(
                   child: _isLoading
                       ? Center(
@@ -374,7 +381,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                               padding: EdgeInsets.fromLTRB(24, 0, 24, 100),
                               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 2,
-                                childAspectRatio: 0.7,
+                                childAspectRatio: 0.68,
                                 crossAxisSpacing: 16,
                                 mainAxisSpacing: 16,
                               ),
@@ -382,7 +389,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                               itemBuilder: (context, index) {
                                 final item = _filteredItems[index];
                                 final cartQuantity = _cart[item.id] ?? 0;
-                                return _buildMenuItemCard(item, cartQuantity, index);
+                                return _buildMenuItemCard(item, cartQuantity);
                               },
                             ),
                 ),
@@ -390,6 +397,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
             ),
           ),
 
+          // Cart bottom bar
           if (_getCartCount() > 0)
             Positioned(
               bottom: 20,
@@ -472,74 +480,65 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildMenuItemCard(MenuItem item, int cartQuantity, int index) {
-    return TweenAnimationBuilder<double>(
-      duration: Duration(milliseconds: 400 + (index * 50)),
-      tween: Tween(begin: 0.0, end: 1.0),
-      curve: Curves.easeOutBack,
-      builder: (context, value, child) {
-        return Transform.scale(
-          scale: value.clamp(0.0, 1.0),
-          child: Opacity(
-            opacity: value.clamp(0.0, 1.0),
-            child: child,
+  Widget _buildMenuItemCard(MenuItem item, int cartQuantity) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 8,
+            offset: Offset(0, 2),
           ),
-        );
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
-              offset: Offset(0, 2),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Item image area
+          Container(
+            height: 110,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: item.categoryColor.withOpacity(0.15),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 120,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: item.categoryColor.withOpacity(0.15),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Stack(
-                children: [
-                  Center(
-                    child: Icon(
-                      item.categoryIcon,
-                      size: 50,
+            child: Stack(
+              children: [
+                Center(
+                  child: Icon(
+                    item.categoryIcon,
+                    size: 45,
+                    color: item.categoryColor,
+                  ),
+                ),
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
                       color: item.categoryColor,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ),
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Container(
-                      padding: EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: item.categoryColor,
-                        borderRadius: BorderRadius.circular(15),
-                      ),
-                      child: Text(
-                        item.categoryDisplay,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    child: Text(
+                      item.categoryDisplay,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            Padding(
+          ),
+          
+          // Item details
+          Expanded(
+            child: Padding(
               padding: EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -547,7 +546,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                   Text(
                     item.name,
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.bold,
                       color: Color(0xFF1F2937),
                     ),
@@ -558,117 +557,105 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                   Text(
                     item.description,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       color: Colors.grey.shade600,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  SizedBox(height: 8),
+                  SizedBox(height: 6),
                   Row(
                     children: [
                       Icon(
                         Icons.timer,
-                        size: 14,
+                        size: 12,
                         color: Color(0xFFF59E0B),
                       ),
                       SizedBox(width: 4),
                       Text(
                         '${item.preparationTime} min',
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 10,
                           color: Colors.grey.shade600,
                         ),
                       ),
                     ],
                   ),
-                  SizedBox(height: 12),
+                  Spacer(),
+                  // Price and Add Button Row - FIXED CLICKABLE BUTTON
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
                         '₹${item.price.toStringAsFixed(0)}',
                         style: TextStyle(
-                          fontSize: 20,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF6366F1),
                         ),
                       ),
-                      // BIG VISIBLE ADD BUTTON
                       if (cartQuantity > 0)
                         Container(
-                          height: 44,
+                          height: 38,
                           decoration: BoxDecoration(
                             color: Color(0xFF6366F1),
-                            borderRadius: BorderRadius.circular(25),
+                            borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              SizedBox(width: 8),
-                              GestureDetector(
+                              InkWell(
                                 onTap: () => _removeFromCart(item.id),
+                                borderRadius: BorderRadius.circular(20),
                                 child: Container(
-                                  padding: EdgeInsets.all(8),
-                                  child: Icon(
-                                    Icons.remove,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
+                                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  child: Icon(Icons.remove, color: Colors.white, size: 18),
                                 ),
                               ),
-                              SizedBox(width: 12),
                               Text(
                                 '$cartQuantity',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 18,
+                                  fontSize: 15,
                                 ),
                               ),
-                              SizedBox(width: 12),
-                              GestureDetector(
+                              InkWell(
                                 onTap: () => _addToCart(item.id),
+                                borderRadius: BorderRadius.circular(20),
                                 child: Container(
-                                  padding: EdgeInsets.all(8),
-                                  child: Icon(
-                                    Icons.add,
-                                    color: Colors.white,
-                                    size: 20,
-                                  ),
+                                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  child: Icon(Icons.add, color: Colors.white, size: 18),
                                 ),
                               ),
-                              SizedBox(width: 8),
                             ],
                           ),
                         )
                       else
-                        ElevatedButton(
-                          onPressed: () => _addToCart(item.id),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(0xFF6366F1),
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(25),
-                            ),
-                            minimumSize: Size(90, 44),
-                            elevation: 2,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.add, size: 20),
-                              SizedBox(width: 6),
-                              Text(
-                                'ADD',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                ),
+                        Material(
+                          color: Color(0xFF6366F1),
+                          borderRadius: BorderRadius.circular(20),
+                          child: InkWell(
+                            onTap: () => _addToCart(item.id),
+                            borderRadius: BorderRadius.circular(20),
+                            child: Container(
+                              padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.add, color: Colors.white, size: 18),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'ADD',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
                     ],
@@ -676,8 +663,8 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                 ],
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
