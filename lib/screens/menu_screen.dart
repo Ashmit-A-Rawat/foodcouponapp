@@ -458,6 +458,7 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                               borderRadius: BorderRadius.circular(20),
                             ),
                             elevation: 0,
+                            minimumSize: Size(120, 48), // Increased button size
                           ),
                           child: Text(
                             'View Cart',
@@ -604,51 +605,85 @@ class _MenuScreenState extends State<MenuScreen> with TickerProviderStateMixin {
                               color: Color(0xFF6366F1),
                             ),
                           ),
+                          // Improved Add to Cart Button Area
                           if (cartQuantity > 0)
                             Container(
+                              height: 36, // Fixed height for better touch target
                               decoration: BoxDecoration(
                                 color: Color(0xFF6366F1),
-                                borderRadius: BorderRadius.circular(20),
+                                borderRadius: BorderRadius.circular(24),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  IconButton(
-                                    onPressed: () => _removeFromCart(item.id),
-                                    icon: Icon(Icons.remove, color: Colors.white, size: 16),
-                                    constraints: BoxConstraints(
-                                      minWidth: 30,
-                                      minHeight: 30,
+                                  SizedBox(width: 4),
+                                  InkWell(
+                                    onTap: () => _removeFromCart(item.id),
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: Container(
+                                      padding: EdgeInsets.all(8),
+                                      child: Icon(
+                                        Icons.remove,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
                                     ),
-                                    padding: EdgeInsets.zero,
                                   ),
+                                  SizedBox(width: 8),
                                   Text(
                                     '$cartQuantity',
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 14,
+                                      fontSize: 16,
                                     ),
                                   ),
-                                  IconButton(
-                                    onPressed: () => _addToCart(item.id),
-                                    icon: Icon(Icons.add, color: Colors.white, size: 16),
-                                    constraints: BoxConstraints(
-                                      minWidth: 30,
-                                      minHeight: 30,
+                                  SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: () => _addToCart(item.id),
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: Container(
+                                      padding: EdgeInsets.all(8),
+                                      child: Icon(
+                                        Icons.add,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
                                     ),
-                                    padding: EdgeInsets.zero,
                                   ),
+                                  SizedBox(width: 4),
                                 ],
                               ),
                             )
                           else
-                            IconButton(
+                            ElevatedButton(
                               onPressed: () => _addToCart(item.id),
-                              icon: Icon(Icons.add_shopping_cart, color: Color(0xFF6366F1)),
-                              constraints: BoxConstraints(
-                                minWidth: 36,
-                                minHeight: 36,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Color(0xFF6366F1),
+                                foregroundColor: Colors.white,
+                                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(24),
+                                ),
+                                minimumSize: Size(80, 36), // Larger minimum size
+                                elevation: 0,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.add_shopping_cart,
+                                    size: 16,
+                                  ),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Add',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                         ],
