@@ -9,7 +9,7 @@ import 'package:flutter/material.dart';
 
 class ApiService {
   static final String baseUrl =
-      dotenv.env['BASE_URL'] ?? 'http://10.140.215.235:5001';
+      dotenv.env['BASE_URL'] ?? 'http://10.0.3.2:5001';
 
   static GlobalKey<NavigatorState>? navigatorKey;
 
